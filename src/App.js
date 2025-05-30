@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 function App() {
   const [fiscales, setFiscales] = useState([]);
@@ -22,17 +23,26 @@ function App() {
   });
 
   const [estadisticas, setEstadisticas] = useState([]);
+  const [filtroFiscal, setFiltroFiscal] = useState('');
+const [busquedaDescripcion, setBusquedaDescripcion] = useState('');
 
-  const fetchEstadisticas = async () => {
-    const res = await axios.get('http://localhost:3000/api/casos/estadisticas');
+
+const fetchEstadisticas = async () => {
+  try {
+    const res = await axios.get('http://localhost:3000/api/estadisticas');
     setEstadisticas(res.data);
-  };
+  } catch (err) {
+    console.error('Error al obtener estadísticas:', err);
+  }
+};
 
+  const [logs, setLogs] = useState([]);
 
   useEffect(() => {
     fetchFiscales();
     fetchCasos();
     fetchEstadisticas();
+    fetchLogs();
   }, []);
 
   const fetchFiscales = async () => {
@@ -106,6 +116,47 @@ function App() {
     }
   };
 
+  const fetchLogs = async () => {
+  try {
+    const res = await axios.get('http://localhost:3000/api/logs');
+    setLogs(res.data);
+  } catch (err) {
+    console.error('Error al obtener logs:', err);
+  }
+};
+
+const casosFiltrados = casos.filter((c) => {
+  const coincideFiscal = filtroFiscal ? c.id_fiscal === Number(filtroFiscal) : true;
+  const coincideDescripcion = c.descripcion.toLowerCase().includes(busquedaDescripcion.toLowerCase());
+  return coincideFiscal && coincideDescripcion;
+});
+
+
+
+
+
+const exportarPDF = () => {
+  const doc = new jsPDF();
+
+  const columnas = ['ID', 'Descripción', 'Estado', 'ID Fiscal'];
+  const filas = casos.map(c => [
+    c.id_caso,
+    c.descripcion,
+    c.estado,
+    c.id_fiscal
+  ]);
+
+  autoTable(doc, {
+    head: [columnas],
+    body: filas
+  });
+
+  doc.save('casos.pdf');
+};
+
+
+
+
   return (
     <div style={{ padding: '2rem', fontFamily: 'Arial' }}>
       <h2>Fiscales</h2>
@@ -140,14 +191,18 @@ function App() {
 
       <hr />
 
-      <h2>Casos</h2>
-      <ul>
-        {casos.map((c) => (
-          <li key={c.id_caso}>
-            #{c.id_caso} - {c.descripcion} — Estado: {c.estado} — Fiscal: {c.id_fiscal}
-          </li>
-        ))}
-      </ul>
+<h2>Casos</h2>
+
+<button onClick={exportarPDF}>Exportar Casos a PDF</button>
+
+<ul>
+  {casos.map((c) => (
+    <li key={c.id_caso}>
+      #{c.id_caso} - {c.descripcion} — Estado: {c.estado} — Fiscal: {c.id_fiscal}
+    </li>
+  ))}
+</ul>
+
 
       <h3>Registrar nuevo caso</h3>
       <form onSubmit={handleSubmitCaso}>
@@ -218,11 +273,85 @@ function App() {
         <button type="submit">Reasignar Caso</button>
       </form>
 
-      <h3>Estadísticas de casos</h3>
+
+
+<hr />
+<h2>Historial de Reasignaciones</h2>
+<table border="1" cellPadding={5}>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Caso</th>
+      <th>Fiscal anterior</th>
+      <th>Fiscal nuevo</th>
+      <th>Motivo</th>
+      <th>Fecha</th>
+    </tr>
+  </thead>
+  <tbody>
+    {logs.map(log => (
+      <tr key={log.id_log}>
+        <td>{log.id_log}</td>
+        <td>{log.caso_descripcion}</td>
+        <td>{log.fiscal_anterior}</td>
+        <td>{log.fiscal_nuevo}</td>
+        <td>{log.motivo}</td>
+        <td>{log.fecha}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+<h2>Estadísticas por Fiscal</h2>
+<table border="1" cellPadding={5}>
+  <thead>
+    <tr>
+      <th>Fiscal</th>
+      <th>Total Casos</th>
+      <th>Pendientes</th>
+      <th>En Proceso</th>
+      <th>Cerrados</th>
+    </tr>
+  </thead>
+  <tbody>
+    {estadisticas.map((f) => (
+      <tr key={f.id_fiscal}>
+        <td>{f.nombre}</td>
+        <td>{f.total_casos}</td>
+        <td>{f.pendientes}</td>
+        <td>{f.en_proceso}</td>
+        <td>{f.cerrados}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+
+<h3>Filtrar Casos</h3>
+<select
+  value={filtroFiscal}
+  onChange={(e) => setFiltroFiscal(e.target.value)}
+>
+  <option value="">Todos los fiscales</option>
+  {fiscales.map((f) => (
+    <option key={f.id_fiscal} value={f.id_fiscal}>
+      {f.nombre}
+    </option>
+  ))}
+</select>
+
+<input
+  type="text"
+  placeholder="Buscar por descripción"
+  value={busquedaDescripcion}
+  onChange={(e) => setBusquedaDescripcion(e.target.value)}
+/>
+
+
 <ul>
-  {estadisticas.map((e, idx) => (
-    <li key={idx}>
-      {e.estado}: {e.cantidad}
+  {casosFiltrados.map((c) => (
+    <li key={c.id_caso}>
+      #{c.id_caso} - {c.descripcion} — Estado: {c.estado} — Fiscal: {c.id_fiscal}
     </li>
   ))}
 </ul>
